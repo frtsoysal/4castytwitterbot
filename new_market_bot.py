@@ -117,14 +117,11 @@ def save_state(state: dict):
 
 def fetch_recent_events(lookback_minutes: int = LOOKBACK_MINUTES) -> List[Dict]:
     """
-    Fetch events created in the last N minutes from /events endpoint.
+    Fetch latest open events from /events endpoint.
+    No time filtering - we track tweeted events in state instead.
     """
-    # Calculate cutoff time
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=lookback_minutes)
-    cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
-    
     params = {
-        "limit": 100,
+        "limit": 200,  # Get more events to catch recent quality ones
         "order": "createdAt",
         "ascending": "false",
         "closed": "false",
@@ -141,18 +138,7 @@ def fetch_recent_events(lookback_minutes: int = LOOKBACK_MINUTES) -> List[Dict]:
             events = json.loads(resp.read().decode())
             if not isinstance(events, list):
                 return []
-            
-            # Filter to only events created after cutoff
-            recent = []
-            for event in events:
-                created_at = event.get("createdAt", "")
-                if created_at >= cutoff_str:
-                    recent.append(event)
-                else:
-                    # Events are sorted by createdAt desc, so we can stop
-                    break
-            
-            return recent
+            return events
             
     except Exception as e:
         logger.error(f"Gamma API error: {e}")
@@ -477,19 +463,19 @@ def run_once(
 ) -> dict:
     """
     Single polling iteration.
-    Fetches events from last 10 minutes, tweets the best one with image.
+    Fetches latest events, tweets the best untweeted quality one with image.
     """
-    logger.info(f"🔍 Polling for events created in last {LOOKBACK_MINUTES} minutes...")
+    logger.info(f"🔍 Polling for new quality events...")
     
-    # Fetch recent events
-    events = fetch_recent_events(LOOKBACK_MINUTES)
+    # Fetch latest events (no time filter - we track tweeted IDs)
+    events = fetch_recent_events()
     if not events:
-        logger.info("No new events in timeframe")
+        logger.info("No events from API")
         state["last_poll_time"] = datetime.now(timezone.utc).isoformat()
         save_state(state)
         return state
     
-    logger.info(f"Found {len(events)} events in last {LOOKBACK_MINUTES} min")
+    logger.info(f"Fetched {len(events)} events from API")
     
     # Filter to quality events
     quality_events = filter_events(events, state)
