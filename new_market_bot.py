@@ -57,7 +57,7 @@ GAMMA_API_BASE = "https://gamma-api.polymarket.com"
 
 # Polling settings
 POLL_INTERVAL_SECONDS = 600  # 10 minutes
-LOOKBACK_MINUTES = 10  # Look for events created in last 10 minutes
+LOOKBACK_MINUTES = 30  # Look for events created in last 30 minutes (buffer for restarts)
 
 # Filters
 MIN_VOLUME = 0  # Minimum total volume to tweet ($0 = no filter)
@@ -187,23 +187,35 @@ def is_sports_event(event: Dict) -> bool:
 def is_crypto_spam(event: Dict) -> bool:
     """Check if event is crypto price prediction spam."""
     title = (event.get("title") or "").lower()
-    if "up or down" in title:
-        return True
+    
+    # Common crypto spam patterns
+    crypto_patterns = [
+        "up or down",
+        "bitcoin above", "bitcoin price", "bitcoin hit",
+        "ethereum above", "ethereum price", "ethereum hit",
+        "solana above", "solana price", "solana hit",
+        "xrp above", "xrp price", "xrp hit",
+        "doge above", "doge price", "doge hit",
+        "btc above", "btc price", "eth above", "eth price",
+        "sol above", "sol price",
+    ]
+    
+    for pattern in crypto_patterns:
+        if pattern in title:
+            return True
+    
     return False
 
 
 def is_expired(event: Dict) -> bool:
-    """Check if event's endDate has passed."""
-    end_date = event.get("endDate")
-    if not end_date:
-        return False
-    try:
-        if end_date.endswith('Z'):
-            end_date = end_date[:-1] + '+00:00'
-        end_dt = datetime.fromisoformat(end_date)
-        return end_dt < datetime.now(timezone.utc)
-    except Exception:
-        return False
+    """
+    Check if event is actually closed/expired.
+    Only trust the 'closed' field, not endDate (Polymarket data can be inconsistent).
+    """
+    # Trust the closed field from Polymarket
+    if event.get("closed") == True:
+        return True
+    return False
 
 
 def filter_events(events: List[Dict], state: dict) -> List[Dict]:
