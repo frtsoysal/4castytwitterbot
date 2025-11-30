@@ -1,0 +1,4 @@
+# Polymarket Twitter Bot Dependencies
+tweepy>=4.14.0
+python-dotenv>=1.0.0
+
